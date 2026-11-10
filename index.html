@@ -154,7 +154,7 @@ async function getJSON(url) {
   return r.json();
 }
 
-function renderMeta(d) {
+function renderMeta(d, isLatest) {
   const m = $("#meta"); m.replaceChildren();
   const add = (k, v) => { const s = el("span"); s.append(k + " ", el("b", "num", v)); m.append(s); };
   add("기준일(미국 종가)", d.data_date);
@@ -163,7 +163,9 @@ function renderMeta(d) {
   add("대상", `${d.universe.screened}종목`);
   const b = $("#banner"); b.replaceChildren();
   const ageH = (Date.now() / 1000 - d.generated_ts) / 3600;
-  if (ageH > 30) b.append(el("div", "banner", `마지막 갱신이 ${Math.floor(ageH)}시간 전입니다. PC가 꺼져 있었거나 갱신에 실패했을 수 있습니다.`));
+  if (isLatest && ageH > 30) b.append(el("div", "banner", `마지막 갱신이 ${Math.floor(ageH)}시간 전입니다. PC가 꺼져 있었거나 갱신에 실패했을 수 있습니다.`));
+  const miss = (d.macro && d.macro.missing) || [];
+  if (miss.length) b.append(el("div", "banner", `거시 지표 일부(${miss.length}개)를 받지 못해 중립으로 계산했습니다. 거시 점수는 참고만 하세요.`));
   const ps = d.price_source || {};
   if (ps.plugin_enabled && ps.plugin_ok === 0 && (d.buys.length + d.sells.length) > 0)
     b.append(el("div", "banner", "이번 후보 종목은 나무 플러그인에서 현재가를 받지 못해 최근 종가를 기준으로 지지·저항을 골랐습니다."));
@@ -227,7 +229,8 @@ function trailBox(kind, p) {
   dl.append(el("dt", "", buy ? "반등" : "하락"), el("dd", "num", (buy ? t.buy_rebound_pct : t.sell_drop_pct).toFixed(1) + "%"));
   box.append(dl);
   const lvl = buy ? t.buy_support : t.sell_resist, gap = (lvl / p.price - 1) * 100;
-  box.append(el("p", "why", `${buy ? t.buy_support_basis : t.sell_resist_basis} · 현재가 대비 ${pct(gap)}`));
+  box.append(el("p", "why", `${buy ? t.buy_support_basis : t.sell_resist_basis} · 현재가 대비 ${pct(gap)}` +
+    (buy && lvl >= p.price ? " · 이미 지지가격 아래라 바로 감시 시작" : "")));
   return box;
 }
 
@@ -285,9 +288,9 @@ function renderList() {
   for (const p of arr) box.append(pickCard(p));
 }
 
-function render(d) {
+function render(d, isLatest) {
   DATA = d;
-  renderMeta(d); renderMacro(d.macro);
+  renderMeta(d, isLatest); renderMacro(d.macro);
   for (const t of document.querySelectorAll(".tab")) {
     const n = (d[t.dataset.k] || []).length;
     t.textContent = (t.dataset.k === "buys" ? "매수 후보 " : "매도 후보 ") + n;
@@ -305,7 +308,7 @@ function render(d) {
 function showError(msg) { $("#list").replaceChildren(el("div", "card empty", msg)); }
 
 async function loadDate(date) {
-  try { render(await getJSON(date ? `data/h/${date}.json` : "data/latest.json")); }
+  try { render(await getJSON(date ? `data/h/${date}.json` : "data/latest.json"), !date); }
   catch (e) { showError("결과를 불러오지 못했습니다. 아직 첫 실행 전이거나 연결 문제일 수 있습니다."); }
 }
 
